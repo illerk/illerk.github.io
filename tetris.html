@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tetris Standalone</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body {
+      background: #181a1b;
+      color: #66fcf1;
+      font-family: 'Segoe UI', 'Consolas', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      margin: 0;
+    }
+    h2 {
+      margin-top: 32px;
+      margin-bottom: 8px;
+      color: #ffe066;
+      text-shadow: 0 0 8px #ffe06644;
+    }
+    #tetris-container {
+      background: #111;
+      border: 2px solid #66fcf1;
+      border-radius: 10px;
+      box-shadow: 0 0 24px #66fcf1cc;
+      padding: 24px 32px 18px 32px;
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #tetris-board {
+      display: grid;
+      grid-template-rows: repeat(20, 22px);
+      grid-template-columns: repeat(10, 22px);
+      gap: 2px;
+      background: #222;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .cell {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      background: #222;
+      box-shadow: 0 0 2px #000a;
+      transition: background 0.1s;
+    }
+    .cell.c1 { background: #66fcf1; }
+    .cell.c2 { background: #ffe066; }
+    .cell.c3 { background: #ff3c3c; }
+    .cell.c4 { background: #aaff66; }
+    .cell.c5 { background: #66aaff; }
+    .cell.c6 { background: #aa66ff; }
+    .cell.c7 { background: #ff66aa; }
+    #tetris-info {
+      color: #ffe066;
+      margin-bottom: 8px;
+      font-size: 1.07em;
+    }
+    #tetris-status {
+      color: #ff3c3c;
+      min-height: 18px;
+      margin-top: 8px;
+      font-size: 1.08em;
+    }
+    #tetris-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 12px;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .tetris-btn-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 0;
+    }
+    .tetris-btn {
+      background: #222;
+      color: #ffe066;
+      border: 2px solid #66fcf1;
+      border-radius: 7px;
+      font-size: 1.5em;
+      font-family: inherit;
+      font-weight: bold;
+      width: 48px;
+      height: 48px;
+      cursor: pointer;
+      box-shadow: 0 0 8px #66fcf144;
+      transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      outline: none;
+    }
+    .tetris-btn:active, .tetris-btn:focus {
+      background: #ffe066;
+      color: #181a1b;
+      box-shadow: 0 0 16px #ffe06688;
+    }
+    #tetris-restart {
+      background: #66fcf1;
+      color: #181a1b;
+      border: none;
+      border-radius: 5px;
+      padding: 7px 22px;
+      font-size: 1em;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 0 8px #66fcf144;
+      transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+    }
+    #tetris-restart:hover, #tetris-restart:focus {
+      background: #ffe066;
+      color: #181a1b;
+      box-shadow: 0 0 16px #ffe06688;
+    }
+  </style>
+</head>
+<body>
+  <h2>TETRIS</h2>
+  <div id="tetris-container">
+    <div id="tetris-info">
+      Lines cleared: <span id="tetris-lines">0</span>
+    </div>
+    <div id="tetris-board"></div>
+    <div id="tetris-status"></div>
+    <div id="tetris-controls">
+      <div class="tetris-btn-row">
+        <button class="tetris-btn" id="btn-rotate" title="Rotate">⟳</button>
+      </div>
+      <div class="tetris-btn-row">
+        <button class="tetris-btn" id="btn-left" title="Left">←</button>
+        <button class="tetris-btn" id="btn-down" title="Down">↓</button>
+        <button class="tetris-btn" id="btn-right" title="Right">→</button>
+      </div>
+      <div class="tetris-btn-row">
+        <button class="tetris-btn" id="btn-drop" title="Drop">⤓</button>
+        <button class="tetris-btn" id="tetris-restart" title="Restart">Restart</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    // --- Tetris core logic ---
+    const ROWS = 20, COLS = 10;
+    let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+    let current, pos, gameOver = false, linesCleared = 0, interval, speed = 420;
+    const shapes = [
+      [[1,1,1,1]], // I
+      [[1,1],[1,1]], // O
+      [[0,1,0],[1,1,1]], // T
+      [[1,0,0],[1,1,1]], // J
+      [[0,0,1],[1,1,1]], // L
+      [[1,1,0],[0,1,1]], // S
+      [[0,1,1],[1,1,0]]  // Z
+    ];
+    const boardDiv = document.getElementById("tetris-board");
+    const linesDiv = document.getElementById("tetris-lines");
+    const statusDiv = document.getElementById("tetris-status");
+    const btnLeft = document.getElementById("btn-left");
+    const btnRight = document.getElementById("btn-right");
+    const btnDown = document.getElementById("btn-down");
+    const btnRotate = document.getElementById("btn-rotate");
+    const btnDrop = document.getElementById("btn-drop");
+    const restartBtn = document.getElementById("tetris-restart");
+
+    function draw() {
+      boardDiv.innerHTML = "";
+      let temp = board.map(row=>row.slice());
+      if (current) {
+        for (let y=0; y<current.length; ++y)
+          for (let x=0; x<current[0].length; ++x)
+            if (current[y][x]) {
+              let py = pos.y+y, px = pos.x+x;
+              if (py>=0 && py<ROWS && px>=0 && px<COLS) temp[py][px]=current[y][x];
+            }
+      }
+      for (let y=0; y<ROWS; ++y) for (let x=0; x<COLS; ++x) {
+        const cell = document.createElement("div");
+        cell.className = "cell" + (temp[y][x] ? " c"+temp[y][x] : "");
+        boardDiv.appendChild(cell);
+      }
+    }
+    function spawn() {
+      let idx = Math.floor(Math.random()*shapes.length);
+      current = shapes[idx].map(row=>row.map(v=>v?idx+1:0));
+      pos = {x:3,y:-2};
+      if (!valid(current,pos.x,pos.y)) {
+        gameOver = true;
+        statusDiv.textContent = "Game over!";
+        clearInterval(interval);
+      }
+    }
+    function valid(shape,x,y) {
+      for (let i=0;i<shape.length;++i)
+        for (let j=0;j<shape[0].length;++j)
+          if (shape[i][j]) {
+            let py=y+i, px=x+j;
+            if (px<0||px>=COLS||py>=ROWS) return false;
+            if (py>=0 && board[py][px]) return false;
+          }
+      return true;
+    }
+    function merge() {
+      for (let y=0; y<current.length; ++y)
+        for (let x=0; x<current[0].length; ++x)
+          if (current[y][x]) {
+            let py=pos.y+y, px=pos.x+x;
+            if (py>=0 && py<ROWS && px>=0 && px<COLS)
+              board[py][px]=current[y][x];
+          }
+    }
+    function clearLines() {
+      let cleared = 0;
+      for (let y=ROWS-1; y>=0; --y) {
+        if (board[y].every(v=>v)) {
+          board.splice(y,1);
+          board.unshift(Array(COLS).fill(0));
+          cleared++;
+          y++;
+        }
+      }
+      if (cleared) {
+        linesCleared += cleared;
+        linesDiv.textContent = linesCleared;
+      }
+    }
+    function drop() {
+      if (!current) return;
+      while(valid(current,pos.x,pos.y+1)) pos.y++;
+      tick();
+    }
+    function rotate() {
+      let n = current[0].length, m = current.length;
+      let rotated = Array.from({length:n},(_,i)=>Array.from({length:m},(_,j)=>current[m-1-j][i]));
+      if (valid(rotated,pos.x,pos.y)) current = rotated;
+    }
+    function tick() {
+      if (!current) return;
+      if (valid(current,pos.x,pos.y+1)) {
+        pos.y++;
+      } else {
+        merge();
+        clearLines();
+        spawn();
+      }
+      draw();
+    }
+    function move(dx) {
+      if (!current) return;
+      if (valid(current,pos.x+dx,pos.y)) {
+        pos.x+=dx;
+        draw();
+      }
+    }
+    function restart() {
+      board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+      linesCleared = 0;
+      gameOver = false;
+      linesDiv.textContent = "0";
+      statusDiv.textContent = "";
+      statusDiv.style.color="#ff3c3c";
+      spawn();
+      draw();
+      clearInterval(interval);
+      interval = setInterval(tick, speed);
+    }
+    // --- Кнопки управления ---
+    btnLeft.onclick = () => { if (!gameOver) move(-1); };
+    btnRight.onclick = () => { if (!gameOver) move(1); };
+    btnDown.onclick = () => { if (!gameOver && valid(current,pos.x,pos.y+1)) { pos.y++; draw(); } };
+    btnRotate.onclick = () => { if (!gameOver) { rotate(); draw(); } };
+    btnDrop.onclick = () => { if (!gameOver) { drop(); draw(); } };
+    restartBtn.onclick = restart;
+
+    // --- Клавиатура (опционально) ---
+    document.onkeydown = function(e) {
+      if (gameOver) return;
+      if (e.code==="ArrowLeft") { move(-1); }
+      else if (e.code==="ArrowRight") { move(1); }
+      else if (e.code==="ArrowDown") { if (valid(current,pos.x,pos.y+1)) { pos.y++; draw(); } }
+      else if (e.code==="ArrowUp") { rotate(); draw(); }
+      else if (e.code==="Space") { drop(); draw(); }
+      else if (e.code==="KeyR") { restart(); }
+    };
+    restart();
+  </script>
+</body>
+</html>
